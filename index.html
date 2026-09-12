@@ -4,16 +4,47 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>지원장학 요청서 분석 및 부서 분류 시스템</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.css" />
+    <!-- 최신 안정화 버전 stlite 로드 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.73.0/build/stlite.css" />
+    <style>
+      #loading-message {
+        font-family: sans-serif;
+        text-align: center;
+        margin-top: 20%;
+        color: #555;
+      }
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px auto;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.js"></script>
+    <div id="root">
+      <div id="loading-message">
+        <div class="spinner"></div>
+        <h3>파이썬 및 분석 환경을 준비 중입니다...</h3>
+        <p>브라우저에 따라 초기 로딩에 10~20초 정도 소요될 수 있습니다.</p>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.73.0/build/stlite.js"></script>
     <script>
       stlite.mount(
         {
           requirements: ["pandas", "openpyxl"],
-          mainScriptData: `
+          entrypoint: "app.py",
+          files: {
+            "app.py": `
 import streamlit as st
 import pandas as pd
 import io
@@ -35,7 +66,7 @@ def get_school_level(name):
         return "특수학교"
     return "기타"
 
-# 학교급 내림차순(고 > 중 > 초 > 유치원 > 특수 > 기타) 정렬용 우선순위 가중치
+# 학교급 내림차순(고 > 중 > 초 > 특수 > 유치원 > 기타) 가중치
 LEVEL_ORDER = {
     "고등학교": 1,
     "중학교": 2,
@@ -45,17 +76,17 @@ LEVEL_ORDER = {
     "기타": 6
 }
 
-# 2. 9개 과 키워드 기반 자동 분류 사전
+# 2. 9개 과 키워드 사전
 DEPT_KEYWORDS = {
     "재정지원과": ["예산", "결산", "계약", "물품", "지출", "회계", "에듀파인", "유아학비", "공유재산", "급여", "인건비", "복합시설"],
-    "중등교육지원과": ["고입", "진로", "진학", "영재", "발명", "교원인사", "중등", "수석교사", "성과상여금", "순회교사", "체육수업", "스포츠클럽"],
+    "중등교육지원과": ["고입", "진로", "진학", "영재", "발명", "교원인사", "중등", "수석교사", "성과상여금", "순회교사", "체육수업", "스포츠클럽", "포상"],
     "초등교육지원과": ["초등", "기초학력", "문해력", "수리력", "학적", "돌봄", "특수교육", "특수교육지원센터", "장애학생", "과학교육", "메이커", "AI미래"],
     "평생교육건강과": ["학원", "교습소", "개인과외", "평생교육", "급식", "보건", "교육환경보호구역", "정화장치", "공기정화", "환경위생"],
     "학교생활교육과": ["학교폭력", "학폭", "사안", "전담조사관", "교권", "교원보호", "아동학대", "자살예방", "마음건강", "SEM119", "관계조정"],
     "학교시설지원과": ["시설", "증개축", "환경개선", "공사", "소음피해", "안전점검", "공간재구조화", "내진보강", "냉난방", "석면"],
     "학교통합지원과": ["인력채용", "대체인력", "교육공무직", "현장체험학습", "생존수영", "디벗", "정보화", "학내망", "무선망", "CCTV", "교과서", "입학준비금", "공기질"],
     "학생맞춤협력과": ["Wee", "위클래스", "위센터", "전문상담", "심리상담", "상담교사", "학생맞춤", "복지", "난독", "경계선", "학업중단"],
-    "행정지원과": ["학생배치", "학급편제", "통학구역", "학구", "재건축", "스마트청사", "행정정보", "연금", "맞춤형복지"]
+    "행정지원과": ["학생배치", "학급편제", "통학구역", "학구", "재건축", "스마트청사", "행정정보", "연금", "맞춤형복지", "청렴", "행정 업무 감축"]
 }
 
 def classify_text(text):
@@ -119,7 +150,7 @@ def extract_file_data(uploaded_file):
     except Exception as e:
         return None
 
-# 다중 파일 업로드 위젯
+# 다중 파일 업로드
 uploaded_files = st.file_uploader(
     "지원장학 요청서 파일(.xlsx)을 일괄 업로드하세요 (복수 선택 가능)", 
     type=["xlsx", "xls"], 
@@ -183,7 +214,6 @@ if uploaded_files:
     # 정렬 처리
     df_sched = pd.DataFrame(schedule_rows)
     if not df_sched.empty:
-        # 담당장학사 오름차순, 학교급 내림차순, 학교명 오름차순
         df_sched = df_sched.sort_values(
             by=["담당장학사", "학교급순위", "학교명"],
             ascending=[True, True, True]
@@ -191,7 +221,6 @@ if uploaded_files:
 
     df_iss = pd.DataFrame(issues_rows)
     if not df_iss.empty:
-        # 학교급 내림차순, 학교명 오름차순
         df_iss = df_iss.sort_values(
             by=["학교급순위", "학교명"],
             ascending=[True, True]
@@ -199,7 +228,6 @@ if uploaded_files:
 
     df_req = pd.DataFrame(requests_rows)
     if not df_req.empty:
-        # 학교급 내림차순, 학교명 오름차순
         df_req = df_req.sort_values(
             by=["학교급순위", "학교명"],
             ascending=[True, True]
@@ -207,13 +235,12 @@ if uploaded_files:
 
     df_cls = pd.DataFrame(classified_rows)
     if not df_cls.empty:
-        # 교육지원청 과 오름차순, 학교급 내림차순, 학교명 오름차순
         df_cls = df_cls.sort_values(
             by=["교육지원청 과", "학교급순위", "학교명"],
             ascending=[True, True, True]
         ).drop(columns=["학교급순위"])[["교육지원청 과", "학교급", "학교명", "구분", "내용"]]
 
-    # 탭 생성 및 출력
+    # 탭 생성
     tab1, tab2, tab3, tab4 = st.tabs([
         "📅 1. 방문 일정", 
         "⚠️ 2. 학교 현안 문제", 
@@ -241,7 +268,6 @@ if uploaded_files:
         st.caption("정렬: 교육지원청 과(오름차순) ➡️ 학교급(고→중→초) ➡️ 학교명(오름차순)")
         st.dataframe(df_cls, use_container_width=True, hide_index=True)
 
-        # 엑셀 다운로드 지원
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df_sched.to_excel(writer, sheet_name="방문일정", index=False)
@@ -256,7 +282,8 @@ if uploaded_files:
         )
 else:
     st.info("관내 학교에서 제출된 지원장학 요청서 엑셀 파일들을 파일 선택창으로 드래그하거나 선택하여 업로드하세요.")
-          `
+`
+          }
         },
         document.getElementById("root")
       );
