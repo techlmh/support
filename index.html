@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>지원장학 요청서 분석 및 부서 분류 시스템</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.js"></script>
+    <script>
+      stlite.mount(
+        {
+          requirements: ["pandas", "openpyxl"],
+          mainScriptData: `
+import streamlit as st
+import pandas as pd
+import io
+
+st.set_page_config(page_title="지원장학 요청서 일괄 분석기", layout="wide")
+st.title("🏫 관내 학교 지원장학 요청서 일괄 분석 및 과별 자동 분류")
+
+# 1. 학교급 판별 함수
+def get_school_level(name):
+    if "고등" in name or name.endswith("고"):
+        return "고등학교"
+    elif "중학" in name or name.endswith("중"):
+        return "중학교"
+    elif "초등" in name or name.endswith("초"):
+        return "초등학교"
+    elif "유치원" in name:
+        return "유치원"
+    elif "특수" in name:
+        return "특수학교"
+    return "기타"
+
+# 학교급 내림차순(고 > 중 > 초 > 유치원 > 특수 > 기타) 정렬용 우선순위 가중치
+LEVEL_ORDER = {
+    "고등학교": 1,
+    "중학교": 2,
+    "초등학교": 3,
+    "특수학교": 4,
+    "유치원": 5,
+    "기타": 6
+}
+
+# 2. 9개 과 키워드 기반 자동 분류 사전
+DEPT_KEYWORDS = {
+    "재정지원과": ["예산", "결산", "계약", "물품", "지출", "회계", "에듀파인", "유아학비", "공유재산", "급여", "인건비", "복합시설"],
+    "중등교육지원과": ["고입", "진로", "진학", "영재", "발명", "교원인사", "중등", "수석교사", "성과상여금", "순회교사", "체육수업", "스포츠클럽"],
+    "초등교육지원과": ["초등", "기초학력", "문해력", "수리력", "학적", "돌봄", "특수교육", "특수교육지원센터", "장애학생", "과학교육", "메이커", "AI미래"],
+    "평생교육건강과": ["학원", "교습소", "개인과외", "평생교육", "급식", "보건", "교육환경보호구역", "정화장치", "공기정화", "환경위생"],
+    "학교생활교육과": ["학교폭력", "학폭", "사안", "전담조사관", "교권", "교원보호", "아동학대", "자살예방", "마음건강", "SEM119", "관계조정"],
+    "학교시설지원과": ["시설", "증개축", "환경개선", "공사", "소음피해", "안전점검", "공간재구조화", "내진보강", "냉난방", "석면"],
+    "학교통합지원과": ["인력채용", "대체인력", "교육공무직", "현장체험학습", "생존수영", "디벗", "정보화", "학내망", "무선망", "CCTV", "교과서", "입학준비금", "공기질"],
+    "학생맞춤협력과": ["Wee", "위클래스", "위센터", "전문상담", "심리상담", "상담교사", "학생맞춤", "복지", "난독", "경계선", "학업중단"],
+    "행정지원과": ["학생배치", "학급편제", "통학구역", "학구", "재건축", "스마트청사", "행정정보", "연금", "맞춤형복지"]
+}
+
+def classify_text(text):
+    scores = {dept: 0 for dept in DEPT_KEYWORDS}
+    for dept, keywords in DEPT_KEYWORDS.items():
+        for kw in keywords:
+            if kw in text:
+                scores[dept] += 1
+    best_dept = max(scores, key=scores.get)
+    return best_dept if scores[best_dept] > 0 else "중등교육지원과"
+
+# 3. 파일 추출 함수
+def extract_file_data(uploaded_file):
+    try:
+        df = pd.read_excel(uploaded_file, header=None)
+        school_name = ""
+        inspector_name = ""
+        date_str = ""
+        issues = []
+        requests = []
+        current_section = None
+
+        for index, row in df.iterrows():
+            col0 = str(row[0]).strip() if pd.notna(row[0]) else ""
+            col1 = str(row[1]).strip() if pd.notna(row[1]) else ""
+            col2 = str(row[2]).strip() if pd.notna(row[2]) else ""
+
+            if "학교담당장학사" in col0 and ":" in col0:
+                parts = col0.split("학교담당장학사")
+                if len(parts) > 1:
+                    inspector_name = parts[1].replace(":", "").strip()
+                if index > 0:
+                    school_name = str(df.iloc[index-1, 0]).strip()
+
+            if "일시" in col1:
+                date_str = col2
+
+            if "학교 현안문제" in col1:
+                current_section = "issues"
+            elif "지원 요청 사항" in col1:
+                current_section = "requests"
+            elif col1 != "" and col1 != "구 분" and col1.lower() != "nan" and "일시" not in col1:
+                current_section = None
+
+            if current_section == "issues":
+                if col2 and col2.lower() != "nan" and "학교 현안문제" not in col2:
+                    issues.append(col2)
+            elif current_section == "requests":
+                if col2 and col2.lower() != "nan" and "지원 요청 사항" not in col2:
+                    requests.append(col2)
+
+        school_level = get_school_level(school_name)
+        return {
+            "school_level": school_level,
+            "school_name": school_name,
+            "inspector": inspector_name,
+            "date": date_str,
+            "issues": issues,
+            "requests": requests
+        }
+    except Exception as e:
+        return None
+
+# 다중 파일 업로드 위젯
+uploaded_files = st.file_uploader(
+    "지원장학 요청서 파일(.xlsx)을 일괄 업로드하세요 (복수 선택 가능)", 
+    type=["xlsx", "xls"], 
+    accept_multiple_files=True
+)
+
+if uploaded_files:
+    schedule_rows = []
+    issues_rows = []
+    requests_rows = []
+    classified_rows = []
+
+    for f in uploaded_files:
+        data = extract_file_data(f)
+        if not data:
+            continue
+        
+        # 1) 방문 일정 행
+        schedule_rows.append({
+            "담당장학사": data["inspector"],
+            "학교급": data["school_level"],
+            "학교급순위": LEVEL_ORDER.get(data["school_level"], 99),
+            "학교명": data["school_name"],
+            "방문 일시": data["date"]
+        })
+
+        # 2) 현안문제 행
+        for item in data["issues"]:
+            issues_rows.append({
+                "학교급": data["school_level"],
+                "학교급순위": LEVEL_ORDER.get(data["school_level"], 99),
+                "학교명": data["school_name"],
+                "내용": item
+            })
+            classified_rows.append({
+                "교육지원청 과": classify_text(item),
+                "학교급": data["school_level"],
+                "학교급순위": LEVEL_ORDER.get(data["school_level"], 99),
+                "학교명": data["school_name"],
+                "구분": "학교 현안문제",
+                "내용": item
+            })
+
+        # 3) 지원 요청 사항 행
+        for item in data["requests"]:
+            requests_rows.append({
+                "학교급": data["school_level"],
+                "학교급순위": LEVEL_ORDER.get(data["school_level"], 99),
+                "학교명": data["school_name"],
+                "내용": item
+            })
+            classified_rows.append({
+                "교육지원청 과": classify_text(item),
+                "학교급": data["school_level"],
+                "학교급순위": LEVEL_ORDER.get(data["school_level"], 99),
+                "학교명": data["school_name"],
+                "구분": "지원 요청 사항",
+                "내용": item
+            })
+
+    # 정렬 처리
+    df_sched = pd.DataFrame(schedule_rows)
+    if not df_sched.empty:
+        # 담당장학사 오름차순, 학교급 내림차순, 학교명 오름차순
+        df_sched = df_sched.sort_values(
+            by=["담당장학사", "학교급순위", "학교명"],
+            ascending=[True, True, True]
+        ).drop(columns=["학교급순위"])[["학교급", "학교명", "방문 일시", "담당장학사"]]
+
+    df_iss = pd.DataFrame(issues_rows)
+    if not df_iss.empty:
+        # 학교급 내림차순, 학교명 오름차순
+        df_iss = df_iss.sort_values(
+            by=["학교급순위", "학교명"],
+            ascending=[True, True]
+        ).drop(columns=["학교급순위"])[["학교급", "학교명", "내용"]]
+
+    df_req = pd.DataFrame(requests_rows)
+    if not df_req.empty:
+        # 학교급 내림차순, 학교명 오름차순
+        df_req = df_req.sort_values(
+            by=["학교급순위", "학교명"],
+            ascending=[True, True]
+        ).drop(columns=["학교급순위"])[["학교급", "학교명", "내용"]]
+
+    df_cls = pd.DataFrame(classified_rows)
+    if not df_cls.empty:
+        # 교육지원청 과 오름차순, 학교급 내림차순, 학교명 오름차순
+        df_cls = df_cls.sort_values(
+            by=["교육지원청 과", "학교급순위", "학교명"],
+            ascending=[True, True, True]
+        ).drop(columns=["학교급순위"])[["교육지원청 과", "학교급", "학교명", "구분", "내용"]]
+
+    # 탭 생성 및 출력
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📅 1. 방문 일정", 
+        "⚠️ 2. 학교 현안 문제", 
+        "💡 3. 교육활동 관련 지원 요청 사항", 
+        "🏛️ 4. 부서별(9개 과) 업무 분류"
+    ])
+
+    with tab1:
+        st.subheader("방문 일정 목록")
+        st.caption("정렬: 담당장학사(오름차순) ➡️ 학교급(고→중→초) ➡️ 학교명(오름차순)")
+        st.dataframe(df_sched, use_container_width=True, hide_index=True)
+
+    with tab2:
+        st.subheader("학교 현안 문제 목록")
+        st.caption("정렬: 학교급(고→중→초) ➡️ 학교명(오름차순)")
+        st.dataframe(df_iss, use_container_width=True, hide_index=True)
+
+    with tab3:
+        st.subheader("교육활동 관련 지원 요청 사항 목록")
+        st.caption("정렬: 학교급(고→중→초) ➡️ 학교명(오름차순)")
+        st.dataframe(df_req, use_container_width=True, hide_index=True)
+
+    with tab4:
+        st.subheader("교육지원청 9개 과별 업무 배정 목록")
+        st.caption("정렬: 교육지원청 과(오름차순) ➡️ 학교급(고→중→초) ➡️ 학교명(오름차순)")
+        st.dataframe(df_cls, use_container_width=True, hide_index=True)
+
+        # 엑셀 다운로드 지원
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df_sched.to_excel(writer, sheet_name="방문일정", index=False)
+            df_iss.to_excel(writer, sheet_name="학교현안문제", index=False)
+            df_req.to_excel(writer, sheet_name="지원요청사항", index=False)
+            df_cls.to_excel(writer, sheet_name="과별배정결과", index=False)
+        st.download_button(
+            label="📥 엑셀 파일로 일괄 다운로드",
+            data=output.getvalue(),
+            file_name="지원장학_요청서_분석_종합.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+else:
+    st.info("관내 학교에서 제출된 지원장학 요청서 엑셀 파일들을 파일 선택창으로 드래그하거나 선택하여 업로드하세요.")
+          `
+        },
+        document.getElementById("root")
+      );
+    </script>
+  </body>
+</html>
