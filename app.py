@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import datetime
 
 st.set_page_config(page_title="지원장학 요청서 일괄 분석기", layout="wide")
 st.title("🏫 관내 학교 지원장학 요청서 일괄 분석 및 과별 자동 분류")
@@ -168,6 +169,11 @@ if uploaded_files:
             if not df_iss.empty: df_iss.to_excel(writer, sheet_name="학교현안문제", index=False)
             if not df_req.empty: df_req.to_excel(writer, sheet_name="지원요청사항", index=False)
             if not df_cls.empty: df_cls.to_excel(writer, sheet_name="과별배정결과", index=False)
-        st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name="지원장학_분석결과.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            
+        # 다운로드 파일명 동적 생성 (예: 202609121445 지원장학 요청서 분류.xlsx)
+        now_str = datetime.datetime.now().strftime("%Y%m%d%H%M")
+        download_filename = f"{now_str} 지원장학 요청서 분류.xlsx"
+        
+        st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name=download_filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 else:
     st.info("관내 학교에서 제출된 지원장학 요청서 엑셀 파일들을 파일 선택창으로 드래그하거나 선택하여 업로드하세요.")
