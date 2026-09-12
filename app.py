@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import datetime
+from datetime import timezone, timedelta
 
 st.set_page_config(page_title="지원장학 요청서 일괄 분석기", layout="wide")
 st.title("🏫 관내 학교 지원장학 요청서 일괄 분석 및 과별 자동 분류")
@@ -198,11 +199,13 @@ if uploaded_files:
             if not df_iss.empty: df_iss.to_excel(writer, sheet_name="학교현안문제", index=False)
             if not df_req.empty: df_req.to_excel(writer, sheet_name="지원요청사항", index=False)
             if not df_cls.empty: df_cls.to_excel(writer, sheet_name="과별배정결과", index=False)
-            if not df_summary.empty: df_summary.to_excel(writer, sheet_name="학교별통계", index=False) # 엑셀 시트 추가
+            if not df_summary.empty: df_summary.to_excel(writer, sheet_name="학교별통계", index=False)
             
-        now_str = datetime.datetime.now().strftime("%Y%m%d%H%M")
+        # WebAssembly 환경의 시차를 보정하여 한국 표준시(KST, UTC+9) 강제 적용
+        kst = timezone(timedelta(hours=9))
+        now_str = datetime.datetime.now(kst).strftime("%Y%m%d%H%M")
         download_filename = f"{now_str} 지원장학 요청서 분류.xlsx"
         
-        st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name=download_filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-else:
+        st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name=download_filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")else:
+        
     st.info("관내 학교에서 제출된 지원장학 요청서 엑셀 파일들을 파일 선택창으로 드래그하거나 선택하여 업로드하세요.")
