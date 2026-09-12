@@ -151,8 +151,20 @@ if uploaded_files:
     df_cls = pd.DataFrame(classified_rows)
     if not df_cls.empty:
         df_cls = df_cls.sort_values(by=["교육지원청 과", "학교급순위", "학교명"]).drop(columns=["학교급순위"])
+        
+        # 학교별 통계 분석 데이터프레임 생성
+        df_summary = df_cls.groupby(['학교급', '학교명', '구분']).size().unstack(fill_value=0).reset_index()
+        for col in ['학교 현안문제', '지원 요청 사항']:
+            if col not in df_summary.columns:
+                df_summary[col] = 0
+        df_summary['총 건수'] = df_summary['학교 현안문제'] + df_summary['지원 요청 사항']
+        # 총 건수 내림차순, 학교명 오름차순 정렬
+        df_summary = df_summary.sort_values(by=['총 건수', '학교명'], ascending=[False, True])
+    else:
+        df_summary = pd.DataFrame()
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📅 방문 일정", "⚠️ 학교 현안 문제", "💡 교육활동 지원 요청 사항", "🏛️ 부서별 업무 분류"])
+    # 탭 구성 (통계 탭 추가)
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📅 방문 일정", "⚠️ 학교 현안 문제", "💡 교육활동 지원 요청", "🏛️ 부서별 업무 분류", "📊 통계 및 분석"])
 
     with tab1:
         st.dataframe(df_sched, use_container_width=True, hide_index=True)
@@ -162,6 +174,23 @@ if uploaded_files:
         st.dataframe(df_req, use_container_width=True, hide_index=True)
     with tab4:
         st.dataframe(df_cls, use_container_width=True, hide_index=True)
+    with tab5:
+        st.subheader("지원장학 요청 내용 빈도 분석")
+        if not df_cls.empty:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**📌 부서별 요청 배정 빈도**")
+                dept_counts = df_cls['교육지원청 과'].value_counts()
+                st.bar_chart(dept_counts)
+            with col2:
+                st.markdown("**📌 학교급별 제출 빈도(건수)**")
+                level_counts = df_cls['학교급'].value_counts()
+                st.bar_chart(level_counts)
+                
+            st.markdown("**📌 학교별 상세 요청 건수 요약**")
+            st.dataframe(df_summary, use_container_width=True, hide_index=True)
+        else:
+            st.info("분석할 통계 데이터가 없습니다.")
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -169,8 +198,8 @@ if uploaded_files:
             if not df_iss.empty: df_iss.to_excel(writer, sheet_name="학교현안문제", index=False)
             if not df_req.empty: df_req.to_excel(writer, sheet_name="지원요청사항", index=False)
             if not df_cls.empty: df_cls.to_excel(writer, sheet_name="과별배정결과", index=False)
+            if not df_summary.empty: df_summary.to_excel(writer, sheet_name="학교별통계", index=False) # 엑셀 시트 추가
             
-        # 다운로드 파일명 동적 생성 (예: 202609121445 지원장학 요청서 분류.xlsx)
         now_str = datetime.datetime.now().strftime("%Y%m%d%H%M")
         download_filename = f"{now_str} 지원장학 요청서 분류.xlsx"
         
