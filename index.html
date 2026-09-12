@@ -23,8 +23,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.73.0/build/stlite.js"></script>
     <script>
-      // app.py 파일을 별도로 불러와서 실행 (코드 충돌 방지)
-      fetch('app.py')
+      // '?v=' + new Date().getTime() 를 추가하여 강력 새로고침 없이도 항상 최신 파이썬 코드를 불러옵니다.
+      fetch('app.py?v=' + new Date().getTime())
         .then(response => response.text())
         .then(pythonCode => {
           document.getElementById("loading").style.display = "none";
