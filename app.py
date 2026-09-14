@@ -159,12 +159,11 @@ if uploaded_files:
             if col not in df_summary.columns:
                 df_summary[col] = 0
         df_summary['총 건수'] = df_summary['학교 현안문제'] + df_summary['지원 요청 사항']
-        # 총 건수 내림차순, 학교명 오름차순 정렬
         df_summary = df_summary.sort_values(by=['총 건수', '학교명'], ascending=[False, True])
     else:
         df_summary = pd.DataFrame()
 
-    # 탭 구성 (통계 탭 추가)
+    # 탭 구성
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📅 방문 일정", "⚠️ 학교 현안 문제", "💡 교육활동 지원 요청", "🏛️ 부서별 업무 분류", "📊 통계 및 분석"])
 
     with tab1:
@@ -208,5 +207,4 @@ if uploaded_files:
         
         st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name=download_filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 else:
-        
     st.info("관내 학교에서 제출된 지원장학 요청서 엑셀 파일들을 파일 선택창으로 드래그하거나 선택하여 업로드하세요.")
