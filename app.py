@@ -206,6 +206,7 @@ if uploaded_files:
         now_str = datetime.datetime.now(kst).strftime("%Y%m%d%H%M")
         download_filename = f"{now_str} 지원장학 요청서 분류.xlsx"
         
-        st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name=download_filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")else:
+        st.download_button("📥 엑셀 파일로 일괄 다운로드", data=output.getvalue(), file_name=download_filename, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        else:
         
     st.info("관내 학교에서 제출된 지원장학 요청서 엑셀 파일들을 파일 선택창으로 드래그하거나 선택하여 업로드하세요.")
