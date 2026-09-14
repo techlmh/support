@@ -4,7 +4,7 @@ import io
 import re
 from openpyxl.styles import Alignment
 
-# 다중 시트 엑셀 다운로드를 위한 변환 함수 (줄바꿈 서식 적용)
+# 다중 시트 엑셀 다운로드를 위한 변환 함수 (줄바꿈 서식 및 열 너비 조정)
 def to_excel_multi_sheet(df_dict):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -18,7 +18,7 @@ def to_excel_multi_sheet(df_dict):
                 for cell in row:
                     cell.alignment = Alignment(wrap_text=True, vertical='top')
                     
-            # 열 너비 자동 조절 (최대 80)
+            # 열 너비 자동 조절 (최대 80 제한)
             for col in worksheet.columns:
                 max_length = 0
                 column = col[0].column_letter
@@ -81,13 +81,13 @@ def extract_header_info(df, filename=""):
             if raw_school_name == "학교명 미상":
                 raw_school_name = val
 
-    # 본문 미검출 시 파일명 기반 보정
+    # 파일명 기반 보정
     if raw_school_name == "학교명 미상" and filename:
         parts = filename.replace(".xlsx", "").replace(".csv", "").split("_")
         if len(parts) > 1:
             raw_school_name = parts[1]
 
-    # 학교급 및 정렬 가중치 부여
+    # 학교급 판별 및 정렬 가중치 부여
     if "중학교" in raw_school_name or filename.startswith("중_"):
         school_level = "중"
         level_sort_val = 1
@@ -110,11 +110,12 @@ if st.button("분석 시작") and uploaded_files:
     request_list = []
     categorized_list = []
     
+    # 세부 키워드 보강 (급식, 기자재, 진학, 출결, 심리 등)
     categories = {
-        "시설 및 환경 개선": ["방송", "공사", "누수", "노후", "수리", "교체", "안전", "공간", "장비"],
-        "예산 및 행정 지원": ["예산", "지원금", "품의", "결제", "계약", "행정", "인력", "채용", "강사"],
-        "교육과정 및 학사 운영": ["교과", "학점제", "평가", "성적", "교육과정", "자유학기", "수업", "디지털", "코딩", "디벗"],
-        "생활지도 및 학생 지원": ["폭력", "학폭", "상담", "정서", "위기", "징계", "출결", "다문화"],
+        "시설 및 환경 개선": ["방송", "공사", "누수", "노후", "수리", "교체", "안전", "공간", "장비", "기자재", "급식", "냉난방", "환경"],
+        "예산 및 행정 지원": ["예산", "지원금", "품의", "결제", "계약", "행정", "인력", "채용", "강사", "회계"],
+        "교육과정 및 학사 운영": ["교과", "학점제", "평가", "성적", "교육과정", "자유학기", "수업", "디지털", "코딩", "디벗", "진학", "학사", "체험학습"],
+        "생활지도 및 학생 지원": ["폭력", "학폭", "상담", "정서", "위기", "징계", "출결", "다문화", "심리", "생명존중", "자해", "자살"],
         "기타(미분류)": []
     }
 
@@ -135,32 +136,59 @@ if st.button("분석 시작") and uploaded_files:
             else:
                 df = pd.read_excel(file, header=None, dtype=str).fillna("")
 
-            # 1. 학교명, 학교급, 담당 장학사 추출
+            # 1. 학교 기본정보 추출
             raw_school_name, school_level, level_sort_val, supervisor_name = extract_header_info(df, file.name)
 
-            # 2. 표 본문 데이터(일시, 현안문제, 지원요청사항) 추출
+            # 2. 표 헤더('구분', '내용') 열 위치 동적 감지
+            header_idx = None
+            col_gubun = 1
+            col_content = 2
+
+            for idx in range(len(df)):
+                row_vals = [re.sub(r'\s+', '', str(v)) for v in df.iloc[idx].values]
+                if any("구분" in v for v in row_vals) and any("내용" in v for v in row_vals):
+                    header_idx = idx
+                    for c_idx, v in enumerate(row_vals):
+                        if "구분" in v:
+                            col_gubun = c_idx
+                        elif "내용" in v and "의견" not in v:
+                            col_content = c_idx
+                    break
+
             visit_date = "일시 미상"
             file_issues = []
             file_requests = []
+            current_section = None
 
-            for index, row in df.iterrows():
-                row_list = list(row.values)
-                for col_idx, cell_value in enumerate(row_list):
-                    cell_clean = re.sub(r'\s+', '', str(cell_value))
-                    next_val = str(row_list[col_idx + 1]).strip() if col_idx + 1 < len(row_list) else ""
-                    
-                    # 상단 안내 문구(※, 【, 협의 등) 제외 후 추출
-                    if "일시" in cell_clean and not any(k in cell_clean for k in ["※", "【", "작성", "협의"]):
-                        if next_val and next_val != "일시 미상":
-                            visit_date = standardize_date(next_val)
-                    elif "현안문제" in cell_clean:
-                        if next_val and next_val != "내용 없음":
-                            file_issues.append(next_val)
-                    elif "지원요청" in cell_clean and not any(k in cell_clean for k in ["※", "【", "서식"]):
-                        if next_val and next_val != "내용 없음":
-                            file_requests.append(next_val)
+            # 3. 표 본문 행 순회 (행 추가 및 병합 셀 완벽 대응)
+            start_row = (header_idx + 1) if header_idx is not None else 0
+            for idx in range(start_row, len(df)):
+                row = df.iloc[idx]
+                row_prefix_str = " ".join([re.sub(r'\s+', '', str(x)) for x in row.values[:col_content]])
+                
+                # 구분 키워드 인식 시 활성 섹션 전환
+                if "일시" in row_prefix_str and not any(k in row_prefix_str for k in ["※", "【", "작성", "협의"]):
+                    current_section = "일시"
+                elif "현안문제" in row_prefix_str or "현안" in row_prefix_str:
+                    current_section = "현안문제"
+                elif "지원요청" in row_prefix_str or ("지원" in row_prefix_str and "요청" in row_prefix_str):
+                    current_section = "지원요청사항"
 
-            # 방문일정 리스트 추가
+                # 본문 내용 추출
+                content_str = str(row[col_content]).strip() if col_content < len(row) else ""
+                
+                # 빈 셀, 기본 안내문구 건너뛰기
+                if not content_str or content_str in ["내용 없음", "nan", "None"]:
+                    continue
+
+                if current_section == "일시":
+                    visit_date = standardize_date(content_str)
+                elif current_section == "현안문제":
+                    file_issues.append(content_str)
+                elif current_section == "지원요청사항":
+                    file_requests.append(content_str)
+
+            # 일정 목록 추가
             schedule_list.append({
                 "level_sort": level_sort_val, 
                 "학교급": school_level, 
@@ -169,7 +197,7 @@ if st.button("분석 시작") and uploaded_files:
                 "담당장학사": supervisor_name
             })
             
-            # 현안문제 추가
+            # 현안문제 목록 추가 (추가된 모든 행 반영)
             for issue in file_issues:
                 issue_list.append({
                     "level_sort": level_sort_val, 
@@ -178,7 +206,7 @@ if st.button("분석 시작") and uploaded_files:
                     "현안문제": issue
                 })
                 
-            # 지원요청사항 추가
+            # 지원요청사항 목록 추가 (추가된 모든 행 반영)
             for req in file_requests:
                 request_list.append({
                     "level_sort": level_sort_val, 
@@ -224,12 +252,13 @@ if st.button("분석 시작") and uploaded_files:
         except Exception as e:
             st.error(f"'{file.name}' 처리 중 오류 발생: {e}")
 
+    # 데이터프레임 변환
     df_schedule = pd.DataFrame(schedule_list)
     df_issue = pd.DataFrame(issue_list)
     df_request = pd.DataFrame(request_list)
     df_categorized = pd.DataFrame(categorized_list)
 
-    # 부서 요청 사항 데이터프레임 생성
+    # 부서 요청 사항 생성
     dept_request_list = []
     for item in categorized_list:
         category = item["유목화 주제"]
@@ -245,7 +274,7 @@ if st.button("분석 시작") and uploaded_files:
         })
     df_dept_request = pd.DataFrame(dept_request_list)
 
-    # 정렬 함수
+    # 정렬 처리
     def sort_and_clean_default(df):
         if not df.empty:
             df = df.sort_values(by=['level_sort', '학교명'])
@@ -272,7 +301,7 @@ if st.button("분석 시작") and uploaded_files:
         "5_부서조치요청": df_dept_request
     }
 
-    # 화면 출력 및 다운로드
+    # 다운로드 버튼 및 탭 미리보기 구성
     st.divider()
     col_title, col_btn = st.columns([3, 1])
     with col_title:
