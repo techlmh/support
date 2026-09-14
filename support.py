@@ -92,22 +92,29 @@ def extract_header_info(df, filename=""):
 
     return raw_school_name, school_level, level_sort_val, supervisor_name
 
-# 9대 핵심 연계 영역 및 부서 업무 매핑 정보
+# 핵심 연계 영역 및 부서 업무 매핑 (고교학점제 독립 분리)
 DOMAIN_AREAS = [
     {
         "area_no": 1,
-        "area": "교육과정 및 수업·평가 (고교학점제 포함)",
+        "area": "고교학점제 운영 지원",
         "main_dept": "중등교육지원과",
-        "sub_dept": "학교통합지원과, 평생교육건강과",
-        "work_desc": "중등 교육과정, 고교학점제 운영 지원, 성적·수행평가 관리, 최성보(최소성취수준보장지도), 학생부 기재요령, 수능/학평 관리 | (연계) 교과서 배부 지원(학교통합), 학원 교습시간 및 시험지 유출 지도점검(평생건강)",
-        "keywords": [
-            "고교학점제", "교육과정", "최소성취수준", "최성보", "학생부", "세특", "생활기록부",
-            "성적", "학업성적", "과정중심", "IB", "수업나눔", "수능", "모의평가", "학평",
-            "고입", "진로", "진학", "교과서배부", "수업", "평가", "운동부", "도서관"
-        ]
+        "sub_dept": "학교통합지원과, 행정지원과",
+        "work_desc": "고교학점제 운영 지원, 최소성취수준보장지도(최성보), 선택과목 개설 및 이수 지도, 고교학점제 학교공간조성 연계 지원",
+        "keywords": ["고교학점제", "최성보", "최소성취수준"]
     },
     {
         "area_no": 2,
+        "area": "교육과정 및 수업·평가",
+        "main_dept": "중등교육지원과",
+        "sub_dept": "학교통합지원과, 평생교육건강과",
+        "work_desc": "중등 교육과정, 성적·수행평가 관리, 학생부 기재요령(세특), 수능/학평 관리 | (연계) 교과서 배부 지원(학교통합), 학원 교습시간 및 시험지 유출 지도점검(평생건강)",
+        "keywords": [
+            "교육과정", "학생부", "세특", "생활기록부", "성적", "학업성적", "과정중심", "IB",
+            "수업나눔", "수능", "모의평가", "학평", "고입", "진로", "진학", "교과서배부", "수업", "평가", "운동부", "도서관"
+        ]
+    },
+    {
+        "area_no": 3,
         "area": "특수교육 및 느린학습자 지원",
         "main_dept": "중등교육지원과 (총괄지원센터: 초등)",
         "sub_dept": "행정지원과, 학생맞춤협력과, 학교통합지원과",
@@ -117,7 +124,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 3,
+        "area_no": 4,
         "area": "생활지도 및 심리·정서 지원 (학생맞춤통합지원)",
         "main_dept": "학생맞춤협력과, 학교생활교육과",
         "sub_dept": "행정지원과",
@@ -129,7 +136,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 4,
+        "area_no": 5,
         "area": "교육활동 보호 및 대외(민원) 대응",
         "main_dept": "학교생활교육과",
         "sub_dept": "중등교육지원과, 행정지원과",
@@ -139,7 +146,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 5,
+        "area_no": 6,
         "area": "교원 인사 및 학교 인력 확충",
         "main_dept": "중등교육지원과, 학교통합지원과",
         "sub_dept": "학생맞춤협력과",
@@ -150,7 +157,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 6,
+        "area_no": 7,
         "area": "디지털 교육환경 및 정보화 지원",
         "main_dept": "학교통합지원과",
         "sub_dept": "중등교육지원과, 행정지원과",
@@ -161,7 +168,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 7,
+        "area_no": 8,
         "area": "학교시설 및 교육환경 개선",
         "main_dept": "학교시설지원과",
         "sub_dept": "평생교육건강과, 재정지원과",
@@ -173,7 +180,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 8,
+        "area_no": 9,
         "area": "학생배치 및 학교규모 적정화",
         "main_dept": "행정지원과 (학생배치팀·목동재건축팀)",
         "sub_dept": "중등교육지원과",
@@ -184,7 +191,7 @@ DOMAIN_AREAS = [
         ]
     },
     {
-        "area_no": 9,
+        "area_no": 10,
         "area": "학교재정 및 행정 업무 경감",
         "main_dept": "재정지원과, 학교통합지원과",
         "sub_dept": "중등교육지원과, 행정지원과, 평생교육건강과",
@@ -214,7 +221,7 @@ def match_domain_area(content):
 # Streamlit 페이지 설정
 st.set_page_config(page_title="지원장학 요청서 자동 분석기", layout="wide")
 st.title("📊 지원장학 요청서 자동 분석 및 부서 연계 웹앱")
-st.markdown("지원장학 요청서를 업로드하면 지정된 셀에서 데이터를 추출하고, **교육지원청 9대 연계 영역 및 부서별 업무 체계**에 따라 자동 분류·정리합니다.")
+st.markdown("지원장학 요청서를 업로드하면 지정된 셀에서 데이터를 추출하고, **고교학점제 및 교육지원청 부서별 연계 체계**에 따라 자동 분류·정리합니다.")
 
 uploaded_files = st.file_uploader("장학 요청서 파일(Excel 또는 CSV)을 업로드하세요.", type=['xlsx', 'csv'], accept_multiple_files=True)
 
@@ -258,7 +265,7 @@ if st.button("분석 시작") and uploaded_files:
             file_requests = []
             current_section = None
 
-            # 3. 본문 행 순회 (행 추가 및 셀 병합 완벽 대응)
+            # 3. 본문 행 순회 (행 추가 및 셀 병합 대응)
             start_row = (header_idx + 1) if header_idx is not None else 0
             for idx in range(start_row, len(df)):
                 row = df.iloc[idx]
@@ -315,7 +322,7 @@ if st.button("분석 시작") and uploaded_files:
                 if not matched:
                     return
                 
-                # 키워드 유목화 데이터
+                # 4. 키워드 유목화 데이터
                 categorized_list.append({
                     "level_sort": level_sort_val,
                     "area_sort": matched["area_no"],
@@ -328,7 +335,7 @@ if st.button("분석 시작") and uploaded_files:
                     "내용": content
                 })
                 
-                # 부서 조치 요청 데이터
+                # 5. 부서 조치 요청 데이터 (요청 문구 없이 원본 내용만 반영)
                 dept_request_list.append({
                     "level_sort": level_sort_val,
                     "area_sort": matched["area_no"],
@@ -338,7 +345,7 @@ if st.button("분석 시작") and uploaded_files:
                     "학교급": school_level,
                     "학교명": raw_school_name,
                     "구분": kind,
-                    "요청 및 건의 내용": f"{content}\n\n[조치요청] 위 사항에 대한 구체적인 지원 방안 검토 요망",
+                    "요청 및 건의 내용": content,
                     "주요 연계 업무 안내": matched["work_desc"]
                 })
 
